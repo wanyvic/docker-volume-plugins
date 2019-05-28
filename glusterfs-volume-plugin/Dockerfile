@@ -1,7 +1,7 @@
 FROM centos:7
 RUN yum install -q -y centos-release-gluster312 && \
   yum install -q -y go git glusterfs glusterfs-fuse attr
-RUN go get github.com/trajano/docker-volume-plugins/glusterfs-volume-plugin && \
+RUN go get github.com/wanyvic/docker-volume-plugins/glusterfs-volume-plugin && \
   mv $HOME/go/bin/glusterfs-volume-plugin / && \
   rm -rf $HOME/go && \
   yum remove -q -y go git gcc && \

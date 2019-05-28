@@ -5,7 +5,7 @@ COPY init.sh /
 RUN ln -s /usr/lib/systemd/system/centos-mounted-volume-plugin.service /etc/systemd/system/multi-user.target.wants/centos-mounted-volume-plugin.service && \
   chmod 644 /usr/lib/systemd/system/centos-mounted-volume-plugin.service && \
   chmod 700 /init.sh
-RUN go get github.com/trajano/docker-volume-plugins/centos-mounted-volume-plugin && \
+RUN go get github.com/wanyvic/docker-volume-plugins/centos-mounted-volume-plugin && \
   mv $HOME/go/bin/centos-mounted-volume-plugin / && \
   rm -rf $HOME/go && \
   yum remove -q -q -y go git gcc && \

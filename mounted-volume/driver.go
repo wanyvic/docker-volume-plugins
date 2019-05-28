@@ -9,6 +9,8 @@ import (
 	"path"
 	"sync"
 	"syscall"
+	"strings"
+	"io/ioutil"
 
 	"github.com/boltdb/bolt"
 	"github.com/docker/go-plugins-helpers/volume"
@@ -217,13 +219,62 @@ func (p *Driver) Mount(req *volume.MountRequest) (*volume.MountResponse, error) 
 
 	mountPoint := path.Join(volume.DefaultDockerRootDirectory, req.ID)
 	if err := os.MkdirAll(mountPoint, 0755); err != nil {
-		return &volume.MountResponse{}, fmt.Errorf("error mounting %s: %s", req.Name, err.Error())
+		return &volume.MountResponse{}, fmt.Errorf("error MkdirAll mounting %s: %s", req.Name, err.Error())
 	}
 
 	if err := p.PreMount(req); err != nil {
 		return &volume.MountResponse{}, fmt.Errorf("error mounting %s on premount: %s", req.Name, err.Error())
 	}
 	defer p.PostMount(req)
+
+	/*
+	*/
+
+	strPreArgs := make([]string, len(volumeInfo.Args))
+	copy(strPreArgs,volumeInfo.Args)
+	foldername := strPreArgs[len(strPreArgs)-1][strings.Index(strPreArgs[len(strPreArgs)-1],":/")+2:]
+	strPreArgs[len(strPreArgs)-1] = strPreArgs[len(strPreArgs)-1][0:strings.Index(strPreArgs[len(strPreArgs)-1],":/")+2]
+
+	var preargs []string
+	if p.mountPointAfterOptions {
+		preargs = append(strPreArgs, "/mnt")
+	} else {
+		preargs = append(preargs, "/mnt")
+		preargs = append(preargs, strPreArgs...)
+	}
+
+	precmd := exec.Command(p.mountExecutable, preargs...)
+	if out, err := precmd.CombinedOutput(); err != nil {
+		fmt.Printf("Command output: %s\n", out)
+		folderpath := path.Join("/mnt/", foldername)
+		if err := os.MkdirAll(folderpath, 0755); err != nil {
+			return &volume.MountResponse{}, fmt.Errorf("error os.MkdirAll folderpath %s premounting %s: %s",folderpath ,req.Name, err.Error())
+		}
+		readmedata :=  []byte("the directory is persistent shared storage directory!\n")
+		if err := ioutil.WriteFile(folderpath + "/readme.txt",readmedata,0644); err != nil {
+			return &volume.MountResponse{}, fmt.Errorf("error os.Create Readme.txt premounting %s: %s", req.Name, err.Error())
+		}
+		// if f,err := os.Create(folderpath + "/readme.txt"); err != nil {
+		// 	return &volume.MountResponse{}, fmt.Errorf("error os.Create Readme.txt premounting %s: %s", req.Name, err.Error())
+		// }else
+		// {
+		// 	defer f.Close()
+		// }
+		// path := "/mnt"
+		// if err := syscall.Unmount(path, 0); err != nil {
+		// 	errno := err.(syscall.Errno)
+		// 	if errno == syscall.EINVAL {
+		// 		return &volume.MountResponse{}, fmt.Errorf("error unmounting invalid mount %s: %s", req.Name, err.Error())
+		// 	} else {
+		// 		return &volume.MountResponse{}, fmt.Errorf("error unmounting %s: %s", req.Name, err.Error())
+		// 	}
+		// }
+	}else{
+		return &volume.MountResponse{}, fmt.Errorf("error premounting exec.Command %s: %s %s %s", req.Name, err.Error(),p.mountExecutable, preargs)
+	}
+
+	/*
+	*/
 
 	var args []string
 	if p.mountPointAfterOptions {
@@ -236,7 +287,7 @@ func (p *Driver) Mount(req *volume.MountRequest) (*volume.MountResponse, error) 
 	cmd := exec.Command(p.mountExecutable, args...)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		fmt.Printf("Command output: %s\n", out)
-		return &volume.MountResponse{}, fmt.Errorf("error mounting %s: %s", req.Name, err.Error())
+		return &volume.MountResponse{}, fmt.Errorf("error mounting exec.Command %s: %s %s %s", req.Name, err.Error(),p.mountExecutable, args)
 	}
 	volumeInfo.MountPoint = mountPoint
 	volumeInfo.Status["mounted"] = true
