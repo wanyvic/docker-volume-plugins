@@ -11,7 +11,7 @@ import (
 	"syscall"
 	"strings"
 	"io/ioutil"
-
+	"time"
 	"github.com/boltdb/bolt"
 	"github.com/docker/go-plugins-helpers/volume"
 )
@@ -237,41 +237,37 @@ func (p *Driver) Mount(req *volume.MountRequest) (*volume.MountResponse, error) 
 
 	var preargs []string
 	if p.mountPointAfterOptions {
-		preargs = append(strPreArgs, "/mnt")
+		preargs = append(strPreArgs, mountPoint)
 	} else {
-		preargs = append(preargs, "/mnt")
+		preargs = append(preargs, mountPoint)
 		preargs = append(preargs, strPreArgs...)
 	}
 
 	precmd := exec.Command(p.mountExecutable, preargs...)
 	if out, err := precmd.CombinedOutput(); err != nil {
-		fmt.Printf("Command output: %s\n", out)
-		folderpath := path.Join("/mnt/", foldername)
-		if err := os.MkdirAll(folderpath, 0755); err != nil {
-			return &volume.MountResponse{}, fmt.Errorf("error os.MkdirAll folderpath %s premounting %s: %s",folderpath ,req.Name, err.Error())
-		}
-		readmedata :=  []byte("the directory is persistent shared storage directory!\n")
-		if err := ioutil.WriteFile(folderpath + "/readme.txt",readmedata,0644); err != nil {
-			return &volume.MountResponse{}, fmt.Errorf("error os.Create Readme.txt premounting %s: %s", req.Name, err.Error())
-		}
-		// if f,err := os.Create(folderpath + "/readme.txt"); err != nil {
-		// 	return &volume.MountResponse{}, fmt.Errorf("error os.Create Readme.txt premounting %s: %s", req.Name, err.Error())
-		// }else
-		// {
-		// 	defer f.Close()
-		// }
-		// path := "/mnt"
-		// if err := syscall.Unmount(path, 0); err != nil {
-		// 	errno := err.(syscall.Errno)
-		// 	if errno == syscall.EINVAL {
-		// 		return &volume.MountResponse{}, fmt.Errorf("error unmounting invalid mount %s: %s", req.Name, err.Error())
-		// 	} else {
-		// 		return &volume.MountResponse{}, fmt.Errorf("error unmounting %s: %s", req.Name, err.Error())
-		// 	}
-		// }
-	}else{
-		return &volume.MountResponse{}, fmt.Errorf("error premounting exec.Command %s: %s %s %s", req.Name, err.Error(),p.mountExecutable, preargs)
+		return &volume.MountResponse{}, fmt.Errorf("error premounting exec.Command %s: %s %s %s %s", req.Name, out, err.Error(),p.mountExecutable, preargs)
 	}
+	
+	folderpath := path.Join(mountPoint,"/", foldername)
+	if err := os.MkdirAll(folderpath, 0755); err != nil {
+		return &volume.MountResponse{}, fmt.Errorf("error os.MkdirAll folderpath %s premounting %s: %s",folderpath ,req.Name, err.Error())
+	}
+	timeUnix:=time.Now().Unix()
+	formatTimeStr:=time.Unix(timeUnix,0).Format("2006-01-02 15:04:05")
+	readmedata :=  []byte("the directory is persistent shared storage directory!\n" + formatTimeStr + "\n")
+	if err := ioutil.WriteFile(folderpath + "/readme.txt",readmedata,0644); err != nil {
+		return &volume.MountResponse{}, fmt.Errorf("error os.Create Readme.txt premounting %s: %s", req.Name, err.Error())
+	}
+
+	if err := syscall.Unmount(mountPoint, 0); err != nil {
+		errno := err.(syscall.Errno)
+		if errno == syscall.EINVAL {
+			return &volume.MountResponse{}, fmt.Errorf("error unmounting invalid mount %s: %s", req.Name, err.Error())
+		} else {
+			return &volume.MountResponse{}, fmt.Errorf("error unmounting %s: %s", req.Name, err.Error())
+		}
+	}
+		
 
 	/*
 	*/
@@ -286,8 +282,7 @@ func (p *Driver) Mount(req *volume.MountRequest) (*volume.MountResponse, error) 
 	log.Println(args)
 	cmd := exec.Command(p.mountExecutable, args...)
 	if out, err := cmd.CombinedOutput(); err != nil {
-		fmt.Printf("Command output: %s\n", out)
-		return &volume.MountResponse{}, fmt.Errorf("error mounting exec.Command %s: %s %s %s", req.Name, err.Error(),p.mountExecutable, args)
+		return &volume.MountResponse{}, fmt.Errorf("error mounting exec.Command %s: %s %s %s %s", req.Name, out, err.Error(),p.mountExecutable, args)
 	}
 	volumeInfo.MountPoint = mountPoint
 	volumeInfo.Status["mounted"] = true
